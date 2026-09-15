@@ -1,0 +1,221 @@
+:root {
+  --bg-primary: #1c1c1e;
+  --bg-secondary: #2c2c2e;
+  --text-primary: #ffffff;
+  --text-secondary: #aeaea2;
+  --brand-color: #3b82f6;
+  --brand-gradient: linear-gradient(135deg, #3b82f6, #60a5fa);
+  --danger-color: #ef4444;
+  --success-color: #10b981;
+  --border-color: rgba(255, 255, 255, 0.08);
+  --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  width: 320px;
+  background-color: var(--bg-primary);
+  font-family: var(--font-family);
+  color: var(--text-primary);
+  box-sizing: border-box;
+}
+
+.card {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-dot {
+  width: 12px;
+  height: 12px;
+  background: var(--brand-gradient);
+  border-radius: 50%;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
+}
+
+h1 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.5px;
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.state-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* Botones */
+.btn {
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.btn-primary {
+  background: var(--brand-gradient);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-danger {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--danger-color);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.btn-danger:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.btn-secondary {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.shortcut-tip {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+kbd {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 2px 5px;
+  font-size: 10px;
+  font-family: monospace;
+}
+
+/* Progreso */
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.percentage-text {
+  font-weight: 600;
+  color: var(--brand-color);
+}
+
+.progress-bar-container {
+  width: 100%;
+  height: 8px;
+  background-color: var(--bg-secondary);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+
+.progress-bar-fill {
+  height: 100%;
+  width: 0;
+  background: var(--brand-gradient);
+  border-radius: 4px;
+  transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Mensajes de Éxito / Error */
+.message-icon {
+  width: 32px;
+  height: 32px;
+  margin: 0 auto;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.message-icon.success {
+  background-color: rgba(16, 185, 129, 0.12);
+  border: 1.5px solid var(--success-color);
+  color: var(--success-color);
+}
+
+.message-icon.success::after {
+  content: "✓";
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.message-icon.error {
+  background-color: rgba(239, 68, 68, 0.12);
+  border: 1.5px solid var(--danger-color);
+  color: var(--danger-color);
+}
+
+.message-icon.error::after {
+  content: "✕";
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.message-text {
+  font-size: 13px;
+  text-align: center;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

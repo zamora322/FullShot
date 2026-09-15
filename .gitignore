@@ -7,7 +7,6 @@ node_modules/
 # =====================
 # Build / Distribución
 # =====================
-dist/
 *.js.map
 *.d.ts
 
