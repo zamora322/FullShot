@@ -1,0 +1,27 @@
+{
+  "name": "fullshot",
+  "version": "1.0.0",
+  "description": "Chrome Extension for full-page screenshots using Manifest V3 and TypeScript",
+  "main": "dist/background.js",
+  "scripts": {
+    "build": "node build.js",
+    "watch": "node build.js --watch"
+  },
+  "keywords": [
+    "chrome-extension",
+    "screenshot",
+    "typescript",
+    "esbuild"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "@types/fabric": "^5.3.11",
+    "esbuild": "^0.20.2",
+    "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "fabric": "^5.5.2"
+  }
+}

@@ -1,0 +1,61 @@
+# =====================
+# Dependencias
+# =====================
+node_modules/
+.npm
+
+# =====================
+# Build / Distribución
+# =====================
+dist/
+*.js.map
+*.d.ts
+
+# =====================
+# TypeScript
+# =====================
+*.tsbuildinfo
+
+# =====================
+# Variables de entorno y secretos
+# =====================
+.env
+.env.local
+.env.*.local
+
+# =====================
+# macOS
+# =====================
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# =====================
+# Logs
+# =====================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =====================
+# Editores e IDEs
+# =====================
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# =====================
+# Empaquetado de extensión
+# =====================
+*.zip
+*.crx
+*.pem

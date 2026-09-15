@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div class="logo">
+        <span class="logo-dot"></span>
+        <h1>FullShot</h1>
+      </div>
+    </div>
+
+    <!-- ESTADO INICIAL -->
+    <div id="state-initial" class="state-container">
+      <button id="capture-btn" class="btn btn-primary">
+        Capture Full Page
+      </button>
+      <div class="shortcut-tip">
+        Shortcut: <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd>
+      </div>
+    </div>
+
+    <!-- ESTADO DE CAPTURA -->
+    <div id="state-capturing" class="state-container hidden">
+      <div class="progress-info">
+        <span class="status-text">Capturing...</span>
+        <span id="progress-percentage" class="percentage-text">0%</span>
+      </div>
+      <div class="progress-bar-container">
+        <div id="progress-bar-fill" class="progress-bar-fill"></div>
+      </div>
+      <button id="cancel-btn" class="btn btn-danger">
+        Cancel
+      </button>
+    </div>
+
+    <!-- ESTADO DE MENSAJE (ÉXITO / ERROR) -->
+    <div id="state-message" class="state-container hidden">
+      <div id="message-icon" class="message-icon"></div>
+      <p id="message-text" class="message-text"></p>
+      <button id="ok-btn" class="btn btn-secondary">
+        Aceptar
+      </button>
+    </div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
