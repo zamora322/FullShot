@@ -47,21 +47,19 @@ async function initEditor() {
         // Cargar imagen de fondo
         fabric.Image.fromURL(dataUrl, (img) => {
             currentImage = img;
+            img.set({
+                left: 0,
+                top: 0,
+                originX: 'left',
+                originY: 'top',
+                selectable: false,
+                evented: false
+            });
             
-            // Establecer el fondo manteniendo la resolución real
-            canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas));
-            
-            // Ajustar el tamaño del canvas interno al tamaño exacto de la imagen
-            if (img.width && img.height) {
-                canvas.setWidth(img.width);
-                canvas.setHeight(img.height);
-            }
-
-            // Aplicar un zoom inicial para que la imagen quepa en la pantalla (Fit to screen)
-            fitToScreen();
-            
-            // Guardar el primer estado en el historial
-            saveHistory();
+            canvas.setBackgroundImage(img, () => {
+                resizeCanvasToViewport();
+                saveHistory();
+            });
         }, { crossOrigin: 'anonymous' });
 
         setupToolbar();
@@ -76,40 +74,41 @@ async function initEditor() {
 }
 
 function resizeCanvasToViewport() {
-    const container = document.getElementById('workspace');
-    if (!container || !canvas) return;
-    // Esto no cambia la resolución del canvas (Width/Height), sino el contenedor envolvente visual
-    const wrapper = document.querySelector('.canvas-container') as HTMLElement;
-    if (wrapper) {
-        // En Fabric.js, para zoom puro usamos setZoom, el tamaño width/height del canvas lo dicta la imagen original.
-        // Pero CSS puede limitar visualmente si no manejamos bien el wrapper.
-    }
+    const workspace = document.getElementById('workspace');
+    if (!workspace || !canvas) return;
+    canvas.setWidth(workspace.clientWidth);
+    canvas.setHeight(workspace.clientHeight);
+    fitToScreen();
 }
 
 function fitToScreen() {
     if (!currentImage || !currentImage.width || !currentImage.height) return;
     const workspace = document.getElementById('workspace');
-    if (!workspace) return;
+    if (!workspace || !canvas) return;
 
-    const scaleX = workspace.clientWidth / currentImage.width;
-    const scaleY = workspace.clientHeight / currentImage.height;
-    
-    // Tomar la escala menor para que quepa todo, con algo de padding (0.9)
-    let scale = Math.min(scaleX, scaleY) * 0.9;
-    if (scale > 1) scale = 1; // No hacer upscale de la imagen original por defecto
-    
-    // Centrar
-    const vpt = canvas.viewportTransform;
-    if (vpt) {
-        vpt[0] = scale;
-        vpt[3] = scale;
-        const x = (workspace.clientWidth - currentImage.width * scale) / 2;
-        const y = (workspace.clientHeight - currentImage.height * scale) / 2;
-        vpt[4] = x;
-        vpt[5] = Math.max(20, y); // Al menos 20px de margen superior
-        canvas.requestRenderAll();
-        updateZoomLabel(scale);
+    const wsWidth = workspace.clientWidth;
+    const wsHeight = workspace.clientHeight;
+
+    // Asegurar que el canvas de Fabric coincida con el tamaño completo del workspace
+    if (canvas.getWidth() !== wsWidth || canvas.getHeight() !== wsHeight) {
+        canvas.setWidth(wsWidth);
+        canvas.setHeight(wsHeight);
     }
+
+    const scaleX = wsWidth / currentImage.width;
+    const scaleY = wsHeight / currentImage.height;
+    
+    // Escala para que quepa cómodamente en pantalla con un margen del 5%
+    let scale = Math.min(scaleX, scaleY) * 0.95;
+    if (scale > 1) scale = 1;
+    
+    // Centrar la imagen en el workspace
+    const x = (wsWidth - currentImage.width * scale) / 2;
+    const y = (wsHeight - currentImage.height * scale) / 2;
+    
+    canvas.viewportTransform = [scale, 0, 0, scale, Math.max(0, x), Math.max(10, y)];
+    canvas.requestRenderAll();
+    updateZoomLabel(scale);
 }
 
 // Historial (Undo/Redo)
@@ -409,16 +408,11 @@ function setupCanvasEvents() {
         if (!tempShape) return;
 
         if (currentTool === 'rect' || currentTool === 'highlight' || currentTool === 'blur' || currentTool === 'crop') {
-            tempShape.set({
-                width: Math.abs(drawOriginX - pointer.x),
-                height: Math.abs(drawOriginY - pointer.y)
-            });
-            if (drawOriginX > pointer.x) {
-                tempShape.set({ left: Math.abs(pointer.x) });
-            }
-            if (drawOriginY > pointer.y) {
-                tempShape.set({ top: Math.abs(pointer.y) });
-            }
+            const left = Math.min(drawOriginX, pointer.x);
+            const top = Math.min(drawOriginY, pointer.y);
+            const width = Math.abs(drawOriginX - pointer.x);
+            const height = Math.abs(drawOriginY - pointer.y);
+            tempShape.set({ left, top, width, height });
         } else if (currentTool === 'circle') {
             tempShape.set({
                 rx: Math.abs(drawOriginX - pointer.x),
@@ -477,8 +471,8 @@ function setupCanvasEvents() {
                 const rect = tempShape as fabric.Rect;
                 canvas.remove(rect);
                 
-                if (rect.width! > 50 && rect.height! > 50) {
-                    if (confirm('\u00bfAplicar este recorte?')) {
+                if (rect.width! > 20 && rect.height! > 20) {
+                    if (confirm('¿Aplicar este recorte?')) {
                         applyCrop(rect.left!, rect.top!, rect.width!, rect.height!);
                     }
                 }
@@ -513,38 +507,70 @@ function buildArrowPath(x1: number, y1: number, x2: number, y2: number, color: s
 }
 
 function applyCrop(x: number, y: number, w: number, h: number) {
-    if (!currentImage) return;
+    if (!currentImage || !currentImage.width || !currentImage.height) return;
 
-    // Cambiar el tamaño del canvas
-    canvas.setWidth(w);
-    canvas.setHeight(h);
+    const imgW = currentImage.width;
+    const imgH = currentImage.height;
 
-    // Mover todos los objetos (texto, trazos) y mantenerlos visualmente en el mismo sitio
-    const objects = canvas.getObjects();
-    objects.forEach(obj => {
-        obj.set({
-            left: obj.left! - x,
-            top: obj.top! - y
+    // Normalizar y recortar respetando los límites de la imagen
+    const cropX = Math.max(0, Math.min(Math.round(x), imgW));
+    const cropY = Math.max(0, Math.min(Math.round(y), imgH));
+    const cropW = Math.max(10, Math.min(Math.round(w), imgW - cropX));
+    const cropH = Math.max(10, Math.min(Math.round(h), imgH - cropY));
+
+    if (cropW <= 20 || cropH <= 20) return;
+
+    // Obtener el elemento de imagen original o canvas
+    const imgElement = currentImage.getElement() as HTMLImageElement | HTMLCanvasElement;
+    if (!imgElement) return;
+
+    // Crear un canvas temporal para recortar limpiamente a resolución nativa 1:1
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = cropW;
+    tempCanvas.height = cropH;
+    const tempCtx = tempCanvas.getContext('2d');
+    if (!tempCtx) return;
+
+    tempCtx.drawImage(imgElement, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+    const croppedDataUrl = tempCanvas.toDataURL('image/png');
+
+    fabric.Image.fromURL(croppedDataUrl, (newImg) => {
+        newImg.set({
+            left: 0,
+            top: 0,
+            originX: 'left',
+            originY: 'top',
+            selectable: false,
+            evented: false
         });
-        obj.setCoords();
-    });
 
-    // Crear un nuevo background recortado
-    currentImage.clone((clonedBg: fabric.Image) => {
-        clonedBg.set({
-            cropX: x,
-            cropY: y,
-            width: w,
-            height: h
+        currentImage = newImg;
+
+        // Desplazar todos los objetos en el canvas (dibujos, flechas, texto, etc.)
+        // para que permanezcan en su posición relativa sobre la imagen recortada
+        const objects = canvas.getObjects();
+        objects.forEach((obj) => {
+            obj.set({
+                left: (obj.left || 0) - cropX,
+                top: (obj.top || 0) - cropY
+            });
+            obj.setCoords();
         });
-        
-        canvas.setBackgroundImage(clonedBg, () => {
-            currentImage = clonedBg;
-            canvas.renderAll();
+
+        canvas.setBackgroundImage(newImg, () => {
             fitToScreen();
+            canvas.renderAll();
             saveHistory();
+
+            // Volver a la herramienta select
+            setTool('select');
+            const selectBtn = document.querySelector<HTMLElement>('.tool-btn[data-tool="select"]');
+            if (selectBtn) {
+                document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
+                selectBtn.classList.add('active');
+            }
         });
-    });
+    }, { crossOrigin: 'anonymous' });
 }
 
     canvas.on('object:modified', () => saveHistory());
@@ -627,13 +653,33 @@ function setupExport() {
 
     document.getElementById('btn-copy')?.addEventListener('click', async () => {
         try {
+            if (!currentImage || !currentImage.width || !currentImage.height) return;
+
+            // Guardar estado del viewport
+            const prevVpt = canvas.viewportTransform ? [...canvas.viewportTransform] : [1, 0, 0, 1, 0, 0];
+            const prevWidth = canvas.getWidth();
+            const prevHeight = canvas.getHeight();
+
+            // Configurar canvas temporalmente a 1:1 respecto a la imagen actual
+            canvas.viewportTransform = [1, 0, 0, 1, 0, 0];
+            canvas.setWidth(currentImage.width);
+            canvas.setHeight(currentImage.height);
+            canvas.renderAll();
+
             const dataUrl = canvas.toDataURL({ format: 'png', multiplier: 1 });
+
+            // Restaurar estado visual del canvas
+            canvas.setWidth(prevWidth);
+            canvas.setHeight(prevHeight);
+            canvas.viewportTransform = prevVpt;
+            canvas.renderAll();
+
             const res = await fetch(dataUrl);
             const blob = await res.blob();
             await navigator.clipboard.write([
                 new ClipboardItem({ 'image/png': blob })
             ]);
-            alert('Imagen copiada al portapapeles!');
+            alert('¡Imagen copiada al portapapeles!');
         } catch (err) {
             alert('No se pudo copiar: ' + err);
         }
@@ -657,14 +703,31 @@ function setupExport() {
 }
 
 function exportImage(format: 'png' | 'jpeg') {
-    // Exportar con zoom 1 (resolución original)
-    // El tamaño exportado será el de canvas (que es el tamaño original de la img)
+    if (!currentImage || !currentImage.width || !currentImage.height) return;
+
+    // Guardar el estado actual del viewport y dimensiones del canvas
+    const prevVpt = canvas.viewportTransform ? [...canvas.viewportTransform] : [1, 0, 0, 1, 0, 0];
+    const prevWidth = canvas.getWidth();
+    const prevHeight = canvas.getHeight();
+
+    // Redimensionar temporalmente el canvas al tamaño 1:1 de la imagen actual y resetear viewport
+    canvas.viewportTransform = [1, 0, 0, 1, 0, 0];
+    canvas.setWidth(currentImage.width);
+    canvas.setHeight(currentImage.height);
+    canvas.renderAll();
+
     const options: any = { format, multiplier: 1 };
-    if (format === 'jpeg') options.quality = 0.9;
+    if (format === 'jpeg') options.quality = 0.92;
     
     const dataUrl = canvas.toDataURL(options);
-    
-    // Trigger download
+
+    // Restaurar canvas al tamaño del viewport del workspace
+    canvas.setWidth(prevWidth);
+    canvas.setHeight(prevHeight);
+    canvas.viewportTransform = prevVpt;
+    canvas.renderAll();
+
+    // Descargar
     const a = document.createElement('a');
     a.href = dataUrl;
     a.download = generateFilename(window.location.hostname || 'screenshot', format);
