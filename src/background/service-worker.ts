@@ -132,7 +132,15 @@ async function handleStartCapture(tabId: number) {
     }
 
     let dimensions = dimensionsResponse.dimensions as PageDimensions;
-    const { clientHeight, scrollHeight } = dimensions;
+    const isElementScroll = !!dimensions.isElementScroll;
+
+    const clientHeight = isElementScroll && dimensions.elementClientHeight 
+      ? dimensions.elementClientHeight 
+      : dimensions.clientHeight;
+
+    const scrollHeight = isElementScroll && dimensions.elementScrollHeight 
+      ? dimensions.elementScrollHeight 
+      : dimensions.scrollHeight;
 
     // Calcular puntos de scroll Y
     let scrollPositions: number[] = [];
@@ -143,7 +151,7 @@ async function handleStartCapture(tabId: number) {
       currentY += clientHeight;
     }
     
-    // Asegurarse de capturar la parte inferior exacta de la página
+    // Asegurarse de capturar la parte inferior exacta de la página o elemento
     if (scrollPositions.length > 1) {
       const lastPos = scrollHeight - clientHeight;
       if (scrollPositions[scrollPositions.length - 1] !== lastPos && lastPos > 0) {
@@ -212,27 +220,30 @@ async function handleStartCapture(tabId: number) {
       });
 
       // --- Gestión Dinámica de Lazy Loading ---
-      // Después de cada scroll, volvemos a verificar si la altura del documento aumentó
+      // Después de cada scroll, volvemos a verificar si la altura aumentó
       if (i < totalSteps - 1) {
         const checkDim = await sendTabMessage(tabId, { action: ACTIONS.GET_DIMENSIONS });
         if (checkDim && checkDim.success && checkDim.dimensions) {
           const newDimensions = checkDim.dimensions as PageDimensions;
-          // Si la altura del documento aumentó dinámicamente
-          if (newDimensions.scrollHeight > dimensions.scrollHeight) {
-            console.log(`Altura dinámica detectada: aumentó de ${dimensions.scrollHeight}px a ${newDimensions.scrollHeight}px.`);
+          const currentTotalHeight = isElementScroll ? (dimensions.elementScrollHeight || 0) : dimensions.scrollHeight;
+          const newTotalHeight = isElementScroll ? (newDimensions.elementScrollHeight || 0) : newDimensions.scrollHeight;
+
+          // Si la altura del documento o contenedor aumentó dinámicamente
+          if (newTotalHeight > currentTotalHeight) {
+            console.log(`Altura dinámica detectada: aumentó de ${currentTotalHeight}px a ${newTotalHeight}px.`);
             dimensions = newDimensions; // Actualizar dimensiones de referencia
             
             // Recalcular los puntos de scroll restantes
             const remainingPositions: number[] = [];
             let nextY = scrollPositions[i] + clientHeight;
             
-            while (nextY < newDimensions.scrollHeight) {
+            while (nextY < newTotalHeight) {
               remainingPositions.push(nextY);
               nextY += clientHeight;
             }
             
             // Forzar el final exacto
-            const lastPos = newDimensions.scrollHeight - clientHeight;
+            const lastPos = newTotalHeight - clientHeight;
             if (remainingPositions.length > 0 && remainingPositions[remainingPositions.length - 1] !== lastPos && lastPos > 0) {
               if (remainingPositions[remainingPositions.length - 1] > lastPos) {
                 remainingPositions[remainingPositions.length - 1] = lastPos;

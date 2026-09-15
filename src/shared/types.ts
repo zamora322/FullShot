@@ -1,11 +1,22 @@
 import { ACTIONS } from './constants';
 
+export interface ElementRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 export interface PageDimensions {
   scrollWidth: number;
   scrollHeight: number;
   clientWidth: number;
   clientHeight: number;
   devicePixelRatio: number;
+  isElementScroll?: boolean;
+  elementRect?: ElementRect;
+  elementScrollHeight?: number;
+  elementClientHeight?: number;
 }
 
 export interface CaptureProgress {

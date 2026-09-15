@@ -9,6 +9,8 @@ interface HiddenElement {
 let hiddenElements: HiddenElement[] = [];
 let originalScrollX = 0;
 let originalScrollY = 0;
+let currentScrollElement: HTMLElement | null = null;
+let originalElementScrollTop = 0;
 let isCapturing = false;
 
 // Escuchar mensajes del Service Worker
@@ -69,6 +71,70 @@ chrome.runtime.onMessage.addListener((message: MessagePayload, sender, sendRespo
 function savePageState() {
   originalScrollX = window.scrollX || window.pageXOffset;
   originalScrollY = window.scrollY || window.pageYOffset;
+  if (currentScrollElement) {
+    originalElementScrollTop = currentScrollElement.scrollTop;
+  }
+}
+
+/**
+ * Busca si existe un elemento principal en la página que contenga scroll interno relevante
+ * (por ejemplo un diálogo modal, panel de administración o contenedor SPA)
+ */
+function findScrollableElement(): HTMLElement | null {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  const candidates: { element: HTMLElement; score: number }[] = [];
+  const allElements = document.querySelectorAll('*');
+
+  allElements.forEach((node) => {
+    if (!(node instanceof HTMLElement)) return;
+    if (node.id === OVERLAY_ID || node.tagName === 'HTML' || node.tagName === 'BODY') return;
+    if (node.tagName === 'SCRIPT' || node.tagName === 'STYLE' || node.tagName === 'NOSCRIPT') return;
+
+    const rect = node.getBoundingClientRect();
+    // Debe tener un tamaño visible significativo (mínimo 100x100px)
+    if (rect.width < 100 || rect.height < 100) return;
+    // Debe estar dentro del viewport visible actual
+    if (rect.bottom <= 0 || rect.top >= vh || rect.right <= 0 || rect.left >= vw) return;
+
+    const style = window.getComputedStyle(node);
+    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return;
+
+    const overflowY = style.overflowY;
+    const isOverflowScroll = overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay';
+    const scrollDiff = node.scrollHeight - node.clientHeight;
+
+    // Si tiene scroll vertical de al menos 30 píxeles
+    if (scrollDiff > 30) {
+      let canScroll = isOverflowScroll || node.scrollTop > 0;
+      if (!canScroll) {
+        // Prueba de scroll activo
+        const prev = node.scrollTop;
+        node.scrollTop = prev + 1;
+        if (node.scrollTop !== prev) {
+          canScroll = true;
+          node.scrollTop = prev;
+        }
+      }
+
+      if (canScroll) {
+        const area = rect.width * rect.height;
+        const viewportFraction = area / (vw * vh);
+        const isDialog = node.closest('[role="dialog"], [role="alertdialog"], dialog, .modal, [class*="modal"], [class*="dialog"]') !== null;
+        
+        let score = viewportFraction * Math.min(scrollDiff, 5000);
+        if (isDialog) {
+          score *= 3; // Prioridad alta para modales activos
+        }
+        candidates.push({ element: node, score });
+      }
+    }
+  });
+
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates[0].element;
 }
 
 /**
@@ -79,7 +145,7 @@ function getDimensions(): PageDimensions {
   const html = document.documentElement;
 
   // Calculamos la altura total de forma robusta
-  const scrollHeight = Math.max(
+  const windowScrollHeight = Math.max(
     body.scrollHeight,
     body.offsetHeight,
     html.clientHeight,
@@ -87,7 +153,7 @@ function getDimensions(): PageDimensions {
     html.offsetHeight
   );
 
-  const scrollWidth = Math.max(
+  const windowScrollWidth = Math.max(
     body.scrollWidth,
     body.offsetWidth,
     html.clientWidth,
@@ -95,12 +161,52 @@ function getDimensions(): PageDimensions {
     html.offsetWidth
   );
 
+  const clientWidth = html.clientWidth;
+  const clientHeight = html.clientHeight;
+  const devicePixelRatio = window.devicePixelRatio || 1;
+
+  const windowScrollDiff = windowScrollHeight - clientHeight;
+  const scrollEl = findScrollableElement();
+
+  // Si encontramos un elemento con scroll:
+  // - Si window prácticamente no tiene scroll (< 50px de diferencia), o
+  // - Si el elemento es un modal activo con scroll, o
+  // - Si el elemento tiene un scroll mayor que el de la ventana
+  if (scrollEl) {
+    const elScrollDiff = scrollEl.scrollHeight - scrollEl.clientHeight;
+    const isModal = scrollEl.closest('[role="dialog"], [role="alertdialog"], dialog, .modal, [class*="modal"], [class*="dialog"]') !== null;
+
+    if (windowScrollDiff < 50 || isModal || elScrollDiff > windowScrollDiff) {
+      currentScrollElement = scrollEl;
+      const rect = scrollEl.getBoundingClientRect();
+
+      return {
+        scrollWidth: windowScrollWidth,
+        scrollHeight: windowScrollHeight,
+        clientWidth,
+        clientHeight,
+        devicePixelRatio,
+        isElementScroll: true,
+        elementRect: {
+          left: rect.left,
+          top: rect.top,
+          width: rect.width,
+          height: rect.height
+        },
+        elementScrollHeight: scrollEl.scrollHeight,
+        elementClientHeight: scrollEl.clientHeight
+      };
+    }
+  }
+
+  currentScrollElement = null;
   return {
-    scrollWidth,
-    scrollHeight,
-    clientWidth: html.clientWidth,
-    clientHeight: html.clientHeight,
-    devicePixelRatio: window.devicePixelRatio || 1
+    scrollWidth: windowScrollWidth,
+    scrollHeight: windowScrollHeight,
+    clientWidth,
+    clientHeight,
+    devicePixelRatio,
+    isElementScroll: false
   };
 }
 
@@ -109,15 +215,19 @@ function getDimensions(): PageDimensions {
  */
 function scrollToPosition(y: number): Promise<number> {
   return new Promise((resolve) => {
-    // Realizamos el scroll de forma instantánea
-    window.scrollTo(0, y);
-    
-    // Pequeño retraso adicional para asegurar que se ejecuten lazy loaders y el renderizado
-    setTimeout(() => {
-      // Retornamos el scrollY real en píxeles CSS
-      const actualY = window.scrollY || window.pageYOffset || y;
-      resolve(actualY);
-    }, 200); // 200ms permite que el lazy loading y el renderizado se completen
+    if (currentScrollElement) {
+      currentScrollElement.scrollTop = y;
+      setTimeout(() => {
+        const actualY = currentScrollElement ? currentScrollElement.scrollTop : y;
+        resolve(actualY);
+      }, 200);
+    } else {
+      window.scrollTo(0, y);
+      setTimeout(() => {
+        const actualY = window.scrollY || window.pageYOffset || y;
+        resolve(actualY);
+      }, 200);
+    }
   });
 }
 
@@ -125,7 +235,7 @@ function scrollToPosition(y: number): Promise<number> {
  * Prepara la página web ocultando elementos fixed/sticky y desactivando transiciones
  */
 function preparePageForCapture() {
-  // 1. Inyectar estilos para desactivar animaciones y smooth scrolling
+  // 1. Inyectar estilos para desactivar animaciones, scroll suave y ocultar barras de scroll
   if (!document.getElementById(STYLE_TAG_ID)) {
     const style = document.createElement('style');
     style.id = STYLE_TAG_ID;
@@ -137,6 +247,11 @@ function preparePageForCapture() {
         animation-play-state: paused !important;
         transition: none !important;
         animation: none !important;
+        scrollbar-width: none !important;
+        -ms-overflow-style: none !important;
+      }
+      *::-webkit-scrollbar {
+        display: none !important;
       }
     `;
     document.head.appendChild(style);
@@ -156,6 +271,11 @@ function preparePageForCapture() {
     if (position === 'fixed' || position === 'sticky') {
       // Ignorar el overlay que inyecta nuestra propia extensión
       if (el.id === OVERLAY_ID) return;
+
+      // Si estamos capturando un elemento específico, no ocultar el elemento ni sus ancestros ni descendientes
+      if (currentScrollElement && (el === currentScrollElement || el.contains(currentScrollElement) || currentScrollElement.contains(el))) {
+        return;
+      }
 
       const rect = el.getBoundingClientRect();
       const isVisible = style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0' && rect.width > 0 && rect.height > 0;
@@ -204,6 +324,10 @@ function restorePageState() {
   removeProgressUI();
 
   // 4. Restaurar posición original del scroll
+  if (currentScrollElement) {
+    currentScrollElement.scrollTop = originalElementScrollTop;
+    currentScrollElement = null;
+  }
   window.scrollTo(originalScrollX, originalScrollY);
 }
 
